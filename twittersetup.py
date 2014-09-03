@@ -13,7 +13,7 @@ from twitter.util import printNicely
 from twitter import *
 
 def get_twitter_stream():
-	MY_TWITTER_CREDS = os.path.expanduser('~/.my_app_credentials')  #once we have obtained twitter credentials by the oauth dance, we save them here for reuse.
+	MY_TWITTER_CREDS = 'my_app_credentials.txt'  #once we have obtained twitter credentials by the oauth dance, we save them here for reuse.
 
 	#these are the API keys we use to authenticate our application against twitter. 
 	CONSUMER_KEY='idpNqIbznmlvWoTAFlum5s4Z7'
@@ -33,3 +33,9 @@ def get_twitter_stream():
 	twitter_stream = TwitterStream(auth=twitter_auth,timeout=0.01) # we set a short timeout to allow scrolling
 
 	return twitter_stream
+
+def get_user_name(tweet):
+	if(tweet.get('text')):
+		if(tweet.get('user')):
+			if tweet.get('user').get('screen_name'): return tweet.get('user').get('screen_name')
+	return none

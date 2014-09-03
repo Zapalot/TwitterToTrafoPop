@@ -5,6 +5,12 @@ ehthumbs.db
 # Folder config file
 Desktop.ini
 
+#Passwords and wifi config
+my_app_credentials.txt
+wpa_supplicant.conf
+RasPi/wpa_supplicant.conf
+private/
+
 # Recycle Bin used on file shares
 $RECYCLE.BIN/
 

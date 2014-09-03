@@ -30,6 +30,9 @@
 import freetype
 import time
 import math
+import os
+import re  # regular expressions used to parse led positions from file
+import array
 
 class GrayBitmap(object):
 	"""
@@ -99,6 +102,7 @@ class ColorBitmap(object):
 		return( self.pixels[index:index+3])
 		
 	# create from a monochrome bitmap
+	@staticmethod
 	def make_from_mono(mono_bitmap):
 		rgb_bytes=bytearray(len(mono_bitmap.pixels)*3)
 		dstindex=0
@@ -267,67 +271,155 @@ class Font(object):
 			buffer.bitblt(glyph.bitmap, x, y)
 			x += glyph.advance_width
 			previous_char = char
-	def render_text(self, text, width=None, height=None, x_offset=None,y_offset=None):
+	def render_text(self, text, width=None, height=None, x_offset=0,y_offset=0):
 		"""
 		Render the given `text` into a GrayBitmap and return it.
 
 		If `width`, `height`, and `baseline` are not specified they are computed using
 		the `text_dimensions' method.
 		"""
-		if None in (width, height, x_offset):
-			width, ascent, descent = self.text_dimensions(text)
+		text_width,text_ascend, text_descend=self.text_dimensions(text)
+		if width==None:
+			width = text_width
+		if height==None:
 			height=self.max_ascent+self.max_descent
-			y_offset=0
-			x_offset=0
 
 		outbuffer = GrayBitmap(width, height)
 		self.render_to_buffer(text,x_offset,y_offset,outbuffer)
 		return outbuffer
-# This class handles scrolling of a text in a buffer.
-# Enter a new text using the "set_text" method
-# Shift it by calling "shiftText"
-# Get the shiftet image from "output_buffer"
-class TextScroller(object):
-	def __init__(self,width,height,x_offset,y_offset,speed, font):
-		self.output_buffer=GrayBitmap(width,height) #we will maintain the correctly shiftet version of the text here
-		self.text_buffer= GrayBitmap(1,1)  # we will draw the text once in set_text method.
-		self.font=font
-		self.x_offset=x_offset # a fixed offset that will be added to all positions. allows to freely position the text 
-		self.y_offset=y_offset # a fixed offset that will be added to all positions. allows to freely position the text 
-		self.cur_x=float(0) # the current horizontal shift of the text
-		self.cur_y=float(0) # the current vertical shift of the text
-		self.last_time = time.time() # the time when scrolling was performed for the last time
-		self.x_pixels_per_second=speed # shift per second for time based scrolling
-		self.y_pixels_per_second=0.0 # shift per second for time based scrolling
-	def set_text(self,text):
-		self.text_buffer=self.font.render_text(text)
-		self.cur_x=int(-self.text_buffer.width)
-		self.cur_y=0
-		self.output_buffer.clear()
-		self.output_buffer.bitblt(self.text_buffer,self.cur_x,self.cur_y)
-		self.last_time=time.time() # remember time for time controlled scrolling
-	#scroll by an offset given by the time that has passed since the text was set for the first time
-	def scroll_by_time(self):
-		# the formula will make the graphics move into the visible field and reappear when it is out again.
-		self.cur_x=(float(self.x_pixels_per_second)*float(time.time()-self.last_time))%(self.output_buffer.width+self.text_buffer.width)-self.text_buffer.width
-		self.cur_y=(float(self.y_pixels_per_second)*float(time.time()-self.last_time))%(self.output_buffer.height+self.text_buffer.height)
-		self.render_at_cur_pos()
-	# put the text at the right position
-	def render_at_cur_pos(self):
-		#print(self.cur_x)
-		#print(self.cur_y)
-		self.output_buffer.clear()
-		self.output_buffer.bitblt(self.text_buffer,self.cur_x+self.x_offset,self.cur_y+self.y_offset)
+
 		
-	#scroll by a fixed offset
-	def scroll_by_offset(self,x_offset,y_offset, continue_again):
-		# scroll from beginning if the text has left the visible area
-		if(continue_again):
-			if( self.cur_x>self.text_buffer.width):
-				self.cur_x=-self.text_buffer.width
-			if( self.cur_x<-self.text_buffer.width):
-				self.cur_x=self.text_buffer.width
-		self.cur_x+=x_offset
-		self.cur_y+=y_offset
-		self.render_at_cur_pos()
+#this class is used to map leds to pixels in the bitmap buffer.
+class PixelMapper(object):
+	def __init__(self,x_positions,y_positions):
+		self.x_positions=x_positions
+		self.y_positions=y_positions
+	# pick the colors from the defined led-positions and put them in an array...
+	def get_colors_from_bitmap(self,bitmap,x_offset=0,y_offset=0):
+		#define a clamping function for convenient limiting of positions
+		def get_clamped_pixel(bitmap,x,y):
+			if(x>=0 and x<=bitmap.width-1 and y>=0 and y<=bitmap.height-1):
+				return bitmap.get_at(x,y)
+			else:
+				return [0,0,0]
+		n_leds=len(self.x_positions)
+		output= bytearray(n_leds*3)
+		outpos=0 #position in the output buffer
+		for i in range(n_leds):
+			output[outpos:outpos+3]=get_clamped_pixel(bitmap,self.x_positions[i]+x_offset,self.y_positions[i]+y_offset)
+			outpos+=3
+		return output
+	# a fast way to extract colors from a bitmap for grid aligned leds
+	def get_colors_from_grid(self,bitmap,x_offset=0,y_offset=0,led_width=60,led_height=10):
+		x_offset=int(x_offset)
+		led_width=int(led_width)
+		led_height=int(led_height)
+		output= bytearray(led_width*led_height*3)
+
+		n_empty_start=max(-x_offset,0)
+		n_empty_end=max((x_offset+led_width)-bitmap.width,0)
+		n_to_show=max(led_width-n_empty_start-n_empty_end,0)
 		
+		output_start=n_empty_start*3
+		input_start=max(x_offset*3,0)
+			
+		for row in range(bitmap.height):
+			output[output_start:(output_start+n_to_show*3)]=bitmap.pixels[input_start:(input_start+n_to_show*3)]
+			output_start+=led_width*3
+			input_start+=bitmap.width*3
+		return (output)
+		
+	def get_antialiased_from_bitmap(self,bitmap, x_offsets=[-0.25,0,0.25],y_offsets=[-0.25,0,0.25],x_offset=0,y_offset=0):
+		#define a clamping function for convenient limiting of positions
+		def get_clamped_pixel(bitmap,x,y):
+			if(x>=0 and x<=bitmap.width-1 and y>=0 and y<=bitmap.height-1):
+				return bitmap.get_at(x,y)
+			else:
+				return [0,0,0]
+		n_leds=len(self.x_positions)
+		output= bytearray(n_leds*3)
+		outpos=0 #position in the output buffer
+		n_samples=float(len(x_offsets)*len(y_offsets))
+		for i in range(n_leds):
+			out_val=[0.0,0.0,0.0]
+			for x_o in x_offsets:
+				for y_o in y_offsets:
+					pixel=get_clamped_pixel(bitmap,self.x_positions[i]+x_o+x_offset,self.y_positions[i]+y_o+y_offset)
+					out_val[0]+=pixel[0]
+					out_val[1]+=pixel[1]
+					out_val[2]+=pixel[2]
+			output[outpos]=int(out_val[0]/n_samples)
+			output[outpos+1]=int(out_val[1]/n_samples)
+			output[outpos+2]=int(out_val[2]/n_samples)
+			outpos+=3
+		return output
+	# scale the coordinates (can be useful to fit them to a given buffer size)
+	def scale(self,x_scale,y_scale):
+		for i in range(len(self.x_positions)):
+			self.x_positions[i]*=x_scale
+			self.y_positions[i]*=y_scale
+	# add an offset to the coordinates (can be useful to fit them to a given buffer size)
+	def add_offset(self,x_offset,y_offset):
+		for i in range(len(self.x_positions)):
+			self.x_positions[i]+=x_offset
+			self.y_positions[i]+=y_offset
+	
+	# build a pixelmapper with a rectangulat grid of pixel positions
+	@staticmethod
+	def create_from_grid(width, height):
+		x_pos=array.array('f',[])
+		y_pos=array.array('f',[])
+		for y in range (height):
+			for x in range(width):
+				x_pos.append(float(x))
+				y_pos.append(float(y))
+		return PixelMapper(x_pos,y_pos)
+	
+	# read pixel positions from a file generated by the TrafoPop Editor and return a PixelMapper instance with these coordiantes.
+	@staticmethod
+	def create_from_file(filename):
+		if (not os.path.exists(filename)):
+			print ('Led position definition file not found!')
+			return
+		file=open(filename,'r')	#open position file
+		content=file.read()		#put the content into a string
+		
+		#now we extract the part of the file that interests us: the 'positions' array.
+		#find the definition of the 'positions' array
+		start_matcher=re.compile(r'Point\s*points\s*\[.*\]\s=\s\{') 
+		match_result=start_matcher.search(content)
+		if(match_result== None):
+			print ('couldn\'t find beginning of points array in file!')
+			return
+		content=content[match_result.end():] #strip all the uninteresting part at the beginning...
+		#find the closing bracket of the array definition
+		end_matcher=re.compile(r'\}') 
+		match_result=end_matcher.search(content)
+		if(match_result== None):
+			print ('couldn\'t find end of points array in file!')
+			return
+		content=content[:match_result.start()] #strip everything that comes after the bracket
+		
+		#at this point, we should have the content of the array in a string.
+		
+		# now we split it at all comma's
+		string_parts=content.split(',')
+		
+		#and finally put the content into the right lists...
+		isX=True # the first part is an x-coordinate
+		x_pos=array.array('f',[])
+		y_pos=array.array('f',[])
+		for part in string_parts:
+			#if we cannot convert it, we just skip it...
+			try: 
+				if (isX):
+					x_pos.append(float(part))
+				else:
+					y_pos.append(float(part))
+				isX= not isX
+			except ValueError: 
+				pass
+		if(len(x_pos)!=len(y_pos)):
+			print ('LED coordinate list contains contains an odd number of numbers!')
+			return
+		return PixelMapper(x_pos,y_pos)
