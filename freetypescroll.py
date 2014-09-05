@@ -310,7 +310,7 @@ class PixelMapper(object):
 			outpos+=3
 		return output
 	# a fast way to extract colors from a bitmap for grid aligned leds
-	def get_colors_from_grid(self,bitmap,x_offset=0,y_offset=0,led_width=60,led_height=10):
+	def get_colors_from_grid(self,bitmap,x_offset=0,y_offset=0,led_width=60,led_height=10,mirrorV=False,mirrorH=False):
 		x_offset=int(x_offset)
 		led_width=int(led_width)
 		led_height=int(led_height)
@@ -320,13 +320,21 @@ class PixelMapper(object):
 		n_empty_end=max((x_offset+led_width)-bitmap.width,0)
 		n_to_show=max(led_width-n_empty_start-n_empty_end,0)
 		
-		output_start=n_empty_start*3
+		output_start=n_empty_start*3  # start of the output where something will be copied
+		output_rowstart=0 # where does the current row start
 		input_start=max(x_offset*3,0)
-			
-		for row in range(bitmap.height):
+		
+		rows=range(bitmap.height) #a list of row indices - can be reordered to shuffle/mirror them in the image
+		if(mirrorV==True):rows=reversed(rows) #mirror image vertically
+		
+		for row in rows:
+			input_start=max(x_offset*3,0)+row*bitmap.width*3
 			output[output_start:(output_start+n_to_show*3)]=bitmap.pixels[input_start:(input_start+n_to_show*3)]
+			if(mirrorH==True):
+				output[output_rowstart:(output_rowstart+led_width*3)]=reversed(output[output_rowstart:(output_rowstart+led_width*3)])
 			output_start+=led_width*3
-			input_start+=bitmap.width*3
+			output_rowstart+=led_width*3
+			#input_start+=bitmap.width*3
 		return (output)
 		
 	def get_antialiased_from_bitmap(self,bitmap, x_offsets=[-0.25,0,0.25],y_offsets=[-0.25,0,0.25],x_offset=0,y_offset=0):

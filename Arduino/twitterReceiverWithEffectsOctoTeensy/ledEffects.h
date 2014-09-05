@@ -124,8 +124,8 @@ void LedEffectEngine::doFade(){
     for(int i=0;i<nTotalLeds;i++){
       // do a sinus modulated fade between primary and secondary color
       float rotationfreq=0.00015; //per millisecond
-      float xScale=0.5*sin((float)timeSinceSet*rotationfreq*2*PI);
-      float yScale=0.6*cos((float)timeSinceSet*rotationfreq*2*PI);
+      float xScale=0.2*sin((float)timeSinceSet*rotationfreq*2*PI);
+      float yScale=0.3*cos((float)timeSinceSet*rotationfreq*2*PI);
 
       FloatVec2d ledPos=getLedPosFloat(i); //
       float offset=ledPos.x*xScale+ledPos.y*yScale;
@@ -146,9 +146,9 @@ void LedEffectEngine::doFade(){
 // each led has a small random chance to light up and will then fade out
 void LedEffectEngine::doGlitter(){
   unsigned long timeSinceUpdate= millis()-lastUpdateMillis;
-  float chancePerSecond=0.5;
+  float chancePerSecond=0.05;
   float chanceNow=chancePerSecond*(float)timeSinceUpdate/1000.0;
-  int decay=10;
+  int decay=3;
   long activationThresh=(long)(chanceNow*10000.0); // this will be compared to a random value
   //set all the leds to that color
   for(int i=0;i<nTotalLeds;i++){
@@ -237,8 +237,8 @@ void LedEffectEngine::doRainbow(){
   for(int i=0;i<nTotalLeds;i++){
     //get the position of the LED on the jacket
     FloatVec2d ledPosFloat=getLedPosFloat(i);
-    ledPosFloat.x/=20.0;
-    ledPosFloat.y/=20.0;
+    ledPosFloat.x/=2.0;
+    ledPosFloat.y/=2.0;
     // \begin voodoo 
     // this is NOT the Position of the LED, but something that depends on it..
     FloatVec2d position=(FloatVec2d){

@@ -33,6 +33,9 @@ class ColorMapper:
 		'#white':[255,255,255],
 		'#black':[0,0,0]
 		}
+	def mirrorColors(self):
+		for key in self.colorCommands:
+			self.colorCommands[key]=list(reversed(self.colorCommands[key]))
 	def parse_colors(self,message):
 		words= message.split(' ')
 		n_colors=0

@@ -72,6 +72,7 @@ void setup(){
   smsParser.addReceiver(&ledImageEngine); // allow reception of image load commands
 
   leds.setup();        // setup the SPI communication with the LEDs;
+  effectEngine.setEffect(LedEffectEngine::rainbow);
 
 }
 
